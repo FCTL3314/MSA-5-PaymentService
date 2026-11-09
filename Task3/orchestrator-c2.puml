@@ -1,0 +1,44 @@
+@startuml orchestrator-c2
+!include <C4/C4_Container>
+skinparam defaultFontName "DejaVu Sans"
+LAYOUT_LEFT_RIGHT()
+
+title OrchestrPay: оркестратор Saga как отдельный сервис (C2)
+
+Person(customer, "Клиент", "Оплачивает заказ на маркетплейсе")
+Person(operator, "Оператор антифрода", "Команда «Безопасность»")
+
+System_Boundary(orch, "Payment Orchestrator") {
+  Container(zeebe, "Camunda Zeebe", "BPMN-движок", "Процесс payment-saga: шаги, компенсации, таймеры cut-off, ожидание ручной проверки")
+  Container(tasklist, "Camunda Tasklist", "Web UI", "Задачи ручной проверки")
+  Container(operate, "Camunda Operate", "Web UI", "Ход экземпляров, зависшие шаги, инциденты")
+  Container(workers, "Orchestration workers", "Python, stateless", "Адаптеры job type → команды доменных сервисов")
+  ContainerDb(camundaDb, "Camunda storage", "PostgreSQL", "Вторичное хранилище Operate/Tasklist")
+}
+
+Container(paymentApi, "Payment Service", "Python / FastAPI", "Платёж, State Machine, проводки, идемпотентность")
+ContainerDb(paymentDb, "Payments DB", "PostgreSQL", "payments, payment_events, ledger_entries")
+Container(limits, "Limits Service", "", "Контроль ограничений")
+Container(fraud, "FraudCheck Service", "", "Правила + внешние провайдеры (AML, GeoRisk)")
+ContainerDb(redis, "Redis", "", "Кэш вердиктов, резервы лимитов, ключи идемпотентности")
+Container(notify, "Notification Service", "", "Клиенту и в службу безопасности")
+System_Ext(bank, "Банк / платёжный шлюз", "Списание, перевод, возврат")
+System_Ext(providers, "Антифрод-провайдеры", "AML, GeoRisk")
+
+Rel(customer, paymentApi, "POST /payments", "HTTPS")
+Rel(paymentApi, zeebe, "Старт экземпляра Saga, сообщение CustomerCancelled", "REST v2")
+Rel(workers, zeebe, "Activate / complete / fail jobs", "REST v2, long polling")
+Rel(workers, paymentApi, "create / debit / transfer / refund / complete")
+Rel(workers, limits, "reserve / release")
+Rel(workers, fraud, "check")
+Rel(workers, notify, "notify")
+Rel(operator, tasklist, "Решение ALLOW / DENY")
+Rel(tasklist, zeebe, "Завершение user task")
+Rel(zeebe, camundaDb, "Экспорт состояния")
+Rel(operate, camundaDb, "Чтение")
+Rel(paymentApi, paymentDb, "SQL")
+Rel(paymentApi, bank, "Денежные операции с ключом идемпотентности")
+Rel(fraud, providers, "Проверки с таймаутом и retry")
+Rel(fraud, redis, "Кэш результатов")
+Rel(limits, redis, "Резервы")
+@enduml

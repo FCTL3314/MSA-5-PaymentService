@@ -1,0 +1,8 @@
+SCENARIO           PAYMENT ID                             RESULT
+success            fba07c50-b3f5-4a59-98c0-897baa894a3a   COMPLETED
+flaky              31e82655-f8bd-4424-9491-9a88cde2d0e2   COMPLETED
+limit-exceeded     4fb1f3ff-c967-4c2a-88a3-90ced41da6f3   REJECTED
+debit-declined     73db60a6-c338-4842-8dc7-b86cd96d08d2   REJECTED
+fraud-deny         f780735d-f35b-4367-b684-c053da872821   BLOCKED
+fraud-timeout      c6904962-8f79-41b0-ac13-34b604245e2e   COMPLETED
+transfer-rejected  c6af38f8-047c-44be-8d25-58c52e492961   CANCELLED

@@ -1,0 +1,28 @@
+# Конфигурация Orchestration Cluster (на основе официального configuration/application-postgresql.yaml
+# из camunda/camunda-distributions, версия 8.9).
+camunda:
+  system:
+    cpu-thread-count: "2"
+    io-thread-count: "2"
+  security:
+    authentication:
+      method: "basic"
+      unprotectedApi: true
+    authorizations:
+      enabled: false
+    initialization:
+      users:
+        - username: "demo"
+          password: "demo"
+          name: "Demo Operator"
+          email: "demo@orchestrpay.local"
+      defaultRoles.admin.users:
+        - "demo"
+  data:
+    secondary-storage:
+      type: rdbms
+      rdbms:
+        url: jdbc:postgresql://postgres:5432/camunda
+        username: camunda
+        password: camunda
+        flushInterval: PT0.5S

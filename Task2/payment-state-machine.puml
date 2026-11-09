@@ -1,0 +1,70 @@
+@startuml payment-state-machine
+skinparam defaultFontName "DejaVu Sans"
+skinparam shadowing false
+skinparam ArrowColor #555555
+skinparam state {
+  BackgroundColor #F5F8FF
+  BorderColor #4A6FA5
+  FontSize 13
+}
+skinparam state<<final>> {
+  BackgroundColor #E8F5E9
+  BorderColor #2E7D32
+}
+skinparam state<<failed>> {
+  BackgroundColor #FDECEA
+  BorderColor #C62828
+}
+skinparam state<<wait>> {
+  BackgroundColor #FFF8E1
+  BorderColor #F9A825
+}
+
+title Платёжная операция OrchestrPay: состояния и переходы
+
+state CREATED
+state LIMITS_RESERVED
+state DEBIT_PENDING <<wait>>
+state DEBITED
+state FRAUD_CHECK_PENDING <<wait>>
+state MANUAL_REVIEW <<wait>> : ожидание оператора\n(cut-off 20 мин)
+state APPROVED
+state TRANSFER_PENDING <<wait>>
+state TRANSFERRED : pivot пройден
+state COMPLETED <<final>>
+state COMPENSATING <<failed>> : возврат денег,\nснятие резерва лимитов
+state REJECTED <<failed>> : деньги не списывались
+state BLOCKED <<failed>> : мошенничество,\nденьги возвращены
+state CANCELLED <<failed>> : деньги возвращены
+
+[*] --> CREATED : PaymentInitiated
+CREATED --> LIMITS_RESERVED : LimitsReserved
+CREATED --> COMPENSATING : LimitExceeded
+LIMITS_RESERVED --> DEBIT_PENDING : DebitRequested
+DEBIT_PENDING --> DEBIT_PENDING : DebitTimeout\n(повтор, тот же ключ)
+DEBIT_PENDING --> DEBITED : FundsDebited
+DEBIT_PENDING --> COMPENSATING : DebitDeclined
+DEBITED --> FRAUD_CHECK_PENDING : FraudCheckRequested
+FRAUD_CHECK_PENDING --> APPROVED : FraudCheckAllowed
+FRAUD_CHECK_PENDING --> APPROVED : FraudCheckCutOffExpired
+FRAUD_CHECK_PENDING --> MANUAL_REVIEW : ManualReviewRequired
+FRAUD_CHECK_PENDING --> COMPENSATING : FraudCheckDenied
+MANUAL_REVIEW --> APPROVED : OperatorApproved
+MANUAL_REVIEW --> APPROVED : ManualReviewCutOffExpired
+MANUAL_REVIEW --> COMPENSATING : OperatorDenied
+MANUAL_REVIEW --> COMPENSATING : CustomerCancelled
+APPROVED --> TRANSFER_PENDING : TransferRequested
+TRANSFER_PENDING --> TRANSFER_PENDING : TransferTimeout\n(повтор, тот же ключ)
+TRANSFER_PENDING --> TRANSFERRED : TransferConfirmed
+TRANSFER_PENDING --> COMPENSATING : TransferRejected
+TRANSFERRED --> TRANSFERRED : CompletionFailed\n(повтор)
+TRANSFERRED --> COMPLETED : PaymentCompleted
+COMPENSATING --> COMPENSATING : RefundFailed\n(повтор с backoff)
+COMPENSATING --> REJECTED : CompensationCompleted\n[LimitExceeded, DebitDeclined]
+COMPENSATING --> BLOCKED : CompensationCompleted\n[FraudCheckDenied, OperatorDenied]
+COMPENSATING --> CANCELLED : CompensationCompleted\n[CustomerCancelled, TransferRejected]
+COMPLETED --> [*]
+REJECTED --> [*]
+BLOCKED --> [*]
+CANCELLED --> [*]
+@enduml

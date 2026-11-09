@@ -1,0 +1,94 @@
+Pager usage is off.
+=== Итоговое состояние платежей (payments + payment_events + ledger_entries) ===
+-[ RECORD 1 ]---+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+order_id        | order-A-success-customer-1
+amount          | 1500.00
+status          | COMPLETED
+reason          | 
+transitions     | PaymentInitiated > LimitsReserved > DebitRequested > FundsDebited > FraudCheckRequested > FraudCheckAllowed > TransferRequested > TransferConfirmed > PaymentCompleted
+ledger          | DEBIT,TRANSFER
+transit_balance | 0.00
+-[ RECORD 2 ]---+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+order_id        | order-A-flaky-customer-2
+amount          | 2400.00
+status          | COMPLETED
+reason          | 
+transitions     | PaymentInitiated > LimitsReserved > DebitRequested > DebitTimeout > FundsDebited > FraudCheckRequested > FraudCheckAllowed > TransferRequested > TransferTimeout > TransferConfirmed > PaymentCompleted
+ledger          | DEBIT,TRANSFER
+transit_balance | 0.00
+-[ RECORD 3 ]---+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+order_id        | order-A-limit-exceeded-customer-3
+amount          | 180000.00
+status          | REJECTED
+reason          | LimitExceeded
+transitions     | PaymentInitiated > LimitExceeded > CompensationCompleted
+ledger          | 
+transit_balance | 0
+-[ RECORD 4 ]---+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+order_id        | order-A-debit-declined-customer-4
+amount          | 3100.00
+status          | REJECTED
+reason          | DebitDeclined
+transitions     | PaymentInitiated > LimitsReserved > DebitRequested > DebitDeclined > CompensationCompleted
+ledger          | 
+transit_balance | 0
+-[ RECORD 5 ]---+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+order_id        | order-A-fraud-deny-customer-5
+amount          | 9900.00
+status          | BLOCKED
+reason          | FraudCheckDenied
+transitions     | PaymentInitiated > LimitsReserved > DebitRequested > FundsDebited > FraudCheckRequested > FraudCheckDenied > CompensationCompleted
+ledger          | DEBIT,REFUND
+transit_balance | 0.00
+-[ RECORD 6 ]---+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+order_id        | order-A-fraud-timeout-customer-6
+amount          | 1200.00
+status          | COMPLETED
+reason          | 
+transitions     | PaymentInitiated > LimitsReserved > DebitRequested > FundsDebited > FraudCheckRequested > FraudCheckCutOffExpired > TransferRequested > TransferConfirmed > PaymentCompleted
+ledger          | DEBIT,TRANSFER
+transit_balance | 0.00
+-[ RECORD 7 ]---+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+order_id        | order-A-transfer-rejected-customer-7
+amount          | 5600.00
+status          | CANCELLED
+reason          | TransferRejected
+transitions     | PaymentInitiated > LimitsReserved > DebitRequested > FundsDebited > FraudCheckRequested > FraudCheckAllowed > TransferRequested > TransferRejected > CompensationCompleted
+ledger          | DEBIT,REFUND
+transit_balance | 0.00
+-[ RECORD 8 ]---+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+order_id        | order-B-manual-review-customer-11
+amount          | 84000.00
+status          | COMPLETED
+reason          | 
+transitions     | PaymentInitiated > LimitsReserved > DebitRequested > FundsDebited > FraudCheckRequested > ManualReviewRequired > OperatorApproved > TransferRequested > TransferConfirmed > PaymentCompleted
+ledger          | DEBIT,TRANSFER
+transit_balance | 0.00
+-[ RECORD 9 ]---+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+order_id        | order-B-manual-review-customer-12
+amount          | 120000.00
+status          | BLOCKED
+reason          | OperatorDenied
+transitions     | PaymentInitiated > LimitsReserved > DebitRequested > FundsDebited > FraudCheckRequested > ManualReviewRequired > OperatorDenied > CompensationCompleted
+ledger          | DEBIT,REFUND
+transit_balance | 0.00
+-[ RECORD 10 ]--+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+order_id        | order-B-customer-cancel-customer-13
+amount          | 47000.00
+status          | CANCELLED
+reason          | CustomerCancelled
+transitions     | PaymentInitiated > LimitsReserved > DebitRequested > FundsDebited > FraudCheckRequested > ManualReviewRequired > CustomerCancelled > CompensationCompleted
+ledger          | DEBIT,REFUND
+transit_balance | 0.00
+-[ RECORD 11 ]--+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+order_id        | order-B-manual-cut-off-customer-14
+amount          | 66000.00
+status          | COMPLETED
+reason          | 
+transitions     | PaymentInitiated > LimitsReserved > DebitRequested > FundsDebited > FraudCheckRequested > ManualReviewRequired > ManualReviewCutOffExpired > TransferRequested > TransferConfirmed > PaymentCompleted
+ledger          | DEBIT,TRANSFER
+transit_balance | 0.00
+
+=== Fitness-функция: деньги не зависли на транзитном счёте по завершённым платежам (ожидается 0 строк) ===
+(0 rows)
+
