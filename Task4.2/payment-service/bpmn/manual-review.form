@@ -1,0 +1,100 @@
+{
+  "executionPlatform": "Camunda Cloud",
+  "executionPlatformVersion": "8.9.0",
+  "exporter": {
+    "name": "hand-written",
+    "version": "1.0"
+  },
+  "schemaVersion": 16,
+  "id": "manual-review-form",
+  "type": "default",
+  "components": [
+    {
+      "id": "Text_Intro",
+      "type": "text",
+      "text": "## Ручная антифрод-проверка\nАнтифрод не смог однозначно оценить операцию. Примите решение в течение 20 минут, иначе сработает cut-off и платёж будет разрешён по умолчанию."
+    },
+    {
+      "id": "Field_PaymentId",
+      "type": "textfield",
+      "label": "Платёж",
+      "key": "paymentId",
+      "readonly": true,
+      "layout": { "row": "Row_Ids", "columns": 8 }
+    },
+    {
+      "id": "Field_OrderId",
+      "type": "textfield",
+      "label": "Заказ",
+      "key": "orderId",
+      "readonly": true,
+      "layout": { "row": "Row_Ids", "columns": 8 }
+    },
+    {
+      "id": "Field_CustomerId",
+      "type": "textfield",
+      "label": "Клиент",
+      "key": "customerId",
+      "readonly": true,
+      "layout": { "row": "Row_Parties", "columns": 8 }
+    },
+    {
+      "id": "Field_MerchantId",
+      "type": "textfield",
+      "label": "Контрагент",
+      "key": "merchantId",
+      "readonly": true,
+      "layout": { "row": "Row_Parties", "columns": 8 }
+    },
+    {
+      "id": "Field_Amount",
+      "type": "number",
+      "label": "Сумма",
+      "key": "amount",
+      "readonly": true,
+      "decimalDigits": 2,
+      "layout": { "row": "Row_Money", "columns": 5 }
+    },
+    {
+      "id": "Field_Currency",
+      "type": "textfield",
+      "label": "Валюта",
+      "key": "currency",
+      "readonly": true,
+      "layout": { "row": "Row_Money", "columns": 3 }
+    },
+    {
+      "id": "Field_RiskScore",
+      "type": "number",
+      "label": "Risk score антифрода",
+      "key": "riskScore",
+      "readonly": true,
+      "decimalDigits": 2,
+      "layout": { "row": "Row_Money", "columns": 8 }
+    },
+    {
+      "id": "Field_FraudReason",
+      "type": "textfield",
+      "label": "Почему нужна ручная проверка",
+      "key": "fraudReason",
+      "readonly": true
+    },
+    {
+      "id": "Field_Decision",
+      "type": "radio",
+      "label": "Решение оператора",
+      "key": "fraudDecision",
+      "values": [
+        { "label": "Разрешить операцию", "value": "ALLOW" },
+        { "label": "Запретить операцию (деньги вернутся клиенту)", "value": "DENY" }
+      ],
+      "validate": { "required": true }
+    },
+    {
+      "id": "Field_Comment",
+      "type": "textarea",
+      "label": "Комментарий оператора",
+      "key": "operatorComment"
+    }
+  ]
+}

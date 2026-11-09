@@ -1,0 +1,6 @@
+manual-review      424b287b-dd85-4829-a745-4667d11ae86a
+manual-review      da33084b-3e2f-401e-8e4b-2bbd23a09eea
+customer-cancel    f6aa80fd-125c-488a-b6ef-df8bcae88c3f
+manual-cut-off     d0eecf91-c805-40ae-87df-687acd494b0b
+Решения по manual-review принимаются в Tasklist: http://localhost:8080/tasklist (demo / demo)
+manual-cut-off разрешится сам через 30 с; customer-cancel: ./demo/run-demo.sh cancel <id>

@@ -1,0 +1,137 @@
+2026-11-09 13:07:40.540 INFO  [MainThread] payment-service: Camunda готова: брокеров 1, версия 8.9.28
+2026-11-09 13:07:40.820 INFO  [MainThread] payment-service: Задеплоен процесс payment-saga v1 (key 2251799813685319)
+2026-11-09 13:07:40.820 INFO  [MainThread] payment-service: Задеплоена форма manual-review-form v1
+2026-11-09 13:07:40.825 INFO  [poller:create-payment] worker: Worker 'create-payment' запущен (до 4 jobs параллельно)
+2026-11-09 13:07:40.828 INFO  [poller:reserve-limits] worker: Worker 'reserve-limits' запущен (до 4 jobs параллельно)
+2026-11-09 13:07:40.832 INFO  [poller:fraud-check] worker: Worker 'fraud-check' запущен (до 4 jobs параллельно)
+2026-11-09 13:07:40.833 INFO  [poller:debit-funds] worker: Worker 'debit-funds' запущен (до 4 jobs параллельно)
+2026-11-09 13:07:40.837 INFO  [poller:complete-payment] worker: Worker 'complete-payment' запущен (до 4 jobs параллельно)
+2026-11-09 13:07:40.838 INFO  [poller:transfer-to-merchant] worker: Worker 'transfer-to-merchant' запущен (до 4 jobs параллельно)
+2026-11-09 13:07:40.840 INFO  [poller:notify-customer] worker: Worker 'notify-customer' запущен (до 4 jobs параллельно)
+2026-11-09 13:07:40.844 INFO  [poller:refund-funds] worker: Worker 'refund-funds' запущен (до 4 jobs параллельно)
+2026-11-09 13:07:40.847 INFO  [poller:release-limits] worker: Worker 'release-limits' запущен (до 4 jobs параллельно)
+2026-11-09 13:07:40.848 INFO  [poller:notify-security] worker: Worker 'notify-security' запущен (до 4 jobs параллельно)
+2026-11-09 13:07:40.848 INFO  [poller:cancel-payment] worker: Worker 'cancel-payment' запущен (до 4 jobs параллельно)
+2026-11-09 13:07:42.496 INFO  [AnyIO worker thread] payment-service: payment=fba07c50 запущена Saga: processInstanceKey=2251799813685332, заказ order-A-success-customer-1, сумма 1500.00 RUB, сценарий success
+2026-11-09 13:07:42.523 INFO  [create-payment_0] saga: payment=fba07c50 job=2251799813685347 CREATE_PAYMENT: платёж на 1500.0 RUB по заказу order-A-success-customer-1 создан, статус CREATED
+2026-11-09 13:07:42.566 INFO  [reserve-limits_0] saga: payment=fba07c50 job=2251799813685354 RESERVE_LIMITS: зарезервировано 1500.00, использовано за сутки 1500. CREATED → LIMITS_RESERVED
+2026-11-09 13:07:42.604 INFO  [debit-funds_0] saga: payment=fba07c50 job=2251799813685361 DEBIT_FUNDS: списано 1500.00 RUB: customer:customer-1 → транзитный счёт (ключ debit:fba07c50-b3f5-4a59-98c0-897baa894a3a). DEBIT_PENDING → DEBITED
+2026-11-09 13:07:42.646 INFO  [fraud-check_0] saga: payment=fba07c50 job=2251799813685369 FRAUD_CHECK: запрос в FraudCheck Service. DEBITED → FRAUD_CHECK_PENDING
+2026-11-09 13:07:42.646 INFO  [fraud-check_0] saga: payment=fba07c50 job=2251799813685369 FRAUD_CHECK: решение ALLOW (risk score 0.05, правила + провайдеры): правила и провайдеры не нашли рисков
+2026-11-09 13:07:42.676 INFO  [fraud-check_0] saga: payment=fba07c50 job=2251799813685369 FRAUD_CHECK: FRAUD_CHECK_PENDING → APPROVED
+2026-11-09 13:07:42.700 INFO  [transfer-to-merchant_0] saga: payment=fba07c50 job=2251799813685382 TRANSFER_TO_MERCHANT: переведено 1500.00 RUB контрагенту merchant:merchant-7 (ключ transfer:fba07c50-b3f5-4a59-98c0-897baa894a3a). PIVOT пройден: TRANSFER_PENDING → TRANSFERRED
+2026-11-09 13:07:42.729 INFO  [complete-payment_0] saga: payment=fba07c50 job=2251799813685388 COMPLETE_PAYMENT: платёж проведён, событие PaymentCompleted отправлено в «Финансы». TRANSFERRED → COMPLETED
+2026-11-09 13:07:42.750 INFO  [notify-customer_0] saga: payment=fba07c50 job=2251799813685394 NOTIFY_CUSTOMER: клиенту customer-1 отправлено уведомление PAYMENT_COMPLETED (статус платежа COMPLETED)
+2026-11-09 13:07:43.621 INFO  [AnyIO worker thread] payment-service: payment=31e82655 запущена Saga: processInstanceKey=2251799813685400, заказ order-A-flaky-customer-2, сумма 2400.00 RUB, сценарий flaky
+2026-11-09 13:07:43.640 INFO  [create-payment_0] saga: payment=31e82655 job=2251799813685415 CREATE_PAYMENT: платёж на 2400.0 RUB по заказу order-A-flaky-customer-2 создан, статус CREATED
+2026-11-09 13:07:43.672 INFO  [reserve-limits_0] saga: payment=31e82655 job=2251799813685422 RESERVE_LIMITS: зарезервировано 2400.00, использовано за сутки 2400. CREATED → LIMITS_RESERVED
+2026-11-09 13:07:43.704 WARNING [debit-funds_0] worker: job=2251799813685429 Task_DebitFunds: технический сбой 'банк не ответил за 3 с', повтор через 1000 мс (осталось попыток: 4)
+2026-11-09 13:07:45.163 INFO  [debit-funds_0] saga: payment=31e82655 job=2251799813685429 DEBIT_FUNDS: списано 2400.00 RUB: customer:customer-2 → транзитный счёт (ключ debit:31e82655-f8bd-4424-9491-9a88cde2d0e2). DEBIT_PENDING → DEBITED
+2026-11-09 13:07:45.189 INFO  [fraud-check_0] saga: payment=31e82655 job=2251799813685439 FRAUD_CHECK: запрос в FraudCheck Service. DEBITED → FRAUD_CHECK_PENDING
+2026-11-09 13:07:45.189 INFO  [fraud-check_0] saga: payment=31e82655 job=2251799813685439 FRAUD_CHECK: решение ALLOW (risk score 0.05, правила + провайдеры): правила и провайдеры не нашли рисков
+2026-11-09 13:07:45.213 INFO  [fraud-check_0] saga: payment=31e82655 job=2251799813685439 FRAUD_CHECK: FRAUD_CHECK_PENDING → APPROVED
+2026-11-09 13:07:45.227 WARNING [transfer-to-merchant_0] worker: job=2251799813685452 Task_TransferToMerchant: технический сбой 'банк не подтвердил перевод за 3 с', повтор через 1000 мс (осталось попыток: 4)
+2026-11-09 13:07:47.208 INFO  [transfer-to-merchant_0] saga: payment=31e82655 job=2251799813685452 TRANSFER_TO_MERCHANT: переведено 2400.00 RUB контрагенту merchant:merchant-7 (ключ transfer:31e82655-f8bd-4424-9491-9a88cde2d0e2). PIVOT пройден: TRANSFER_PENDING → TRANSFERRED
+2026-11-09 13:07:47.238 INFO  [complete-payment_0] saga: payment=31e82655 job=2251799813685464 COMPLETE_PAYMENT: платёж проведён, событие PaymentCompleted отправлено в «Финансы». TRANSFERRED → COMPLETED
+2026-11-09 13:07:47.275 WARNING [notify-customer_0] worker: job=2251799813685470 Task_NotifySuccess: технический сбой 'push-шлюз вернул 503', повтор через 1000 мс (осталось попыток: 9)
+2026-11-09 13:07:47.948 INFO  [AnyIO worker thread] payment-service: payment=4fb1f3ff запущена Saga: processInstanceKey=2251799813685473, заказ order-A-limit-exceeded-customer-3, сумма 180000.00 RUB, сценарий limit-exceeded
+2026-11-09 13:07:47.966 INFO  [create-payment_0] saga: payment=4fb1f3ff job=2251799813685488 CREATE_PAYMENT: платёж на 180000.0 RUB по заказу order-A-limit-exceeded-customer-3 создан, статус CREATED
+2026-11-09 13:07:48.000 INFO  [reserve-limits_0] saga: payment=4fb1f3ff job=2251799813685495 RESERVE_LIMITS: отказ: сумма 180000.00 превышает лимит на операцию 150000. CREATED → COMPENSATING
+2026-11-09 13:07:48.000 WARNING [reserve-limits_0] worker: job=2251799813685495 Task_ReserveLimits: бизнес-отказ LIMIT_EXCEEDED (сумма 180000.00 превышает лимит на операцию 150000) → BPMN error, запуск компенсации
+2026-11-09 13:07:48.058 INFO  [cancel-payment_0] saga: payment=4fb1f3ff job=2251799813685513 CANCEL_PAYMENT: компенсация завершена, причина LimitExceeded. COMPENSATING → REJECTED
+2026-11-09 13:07:48.078 INFO  [notify-customer_0] saga: payment=4fb1f3ff job=2251799813685522 NOTIFY_CUSTOMER: клиенту customer-3 отправлено уведомление PAYMENT_NOT_COMPLETED (статус платежа REJECTED)
+2026-11-09 13:07:49.082 INFO  [AnyIO worker thread] payment-service: payment=73db60a6 запущена Saga: processInstanceKey=2251799813685528, заказ order-A-debit-declined-customer-4, сумма 3100.00 RUB, сценарий debit-declined
+2026-11-09 13:07:49.101 INFO  [create-payment_0] saga: payment=73db60a6 job=2251799813685543 CREATE_PAYMENT: платёж на 3100.0 RUB по заказу order-A-debit-declined-customer-4 создан, статус CREATED
+2026-11-09 13:07:49.132 INFO  [reserve-limits_0] saga: payment=73db60a6 job=2251799813685550 RESERVE_LIMITS: зарезервировано 3100.00, использовано за сутки 3100. CREATED → LIMITS_RESERVED
+2026-11-09 13:07:49.158 INFO  [debit-funds_0] saga: payment=73db60a6 job=2251799813685557 DEBIT_FUNDS: банк отказал: недостаточно средств. DEBIT_PENDING → COMPENSATING
+2026-11-09 13:07:49.158 WARNING [debit-funds_0] worker: job=2251799813685557 Task_DebitFunds: бизнес-отказ DEBIT_DECLINED (недостаточно средств на счёте клиента) → BPMN error, запуск компенсации
+2026-11-09 13:07:49.184 INFO  [notify-customer_0] saga: payment=31e82655 job=2251799813685470 NOTIFY_CUSTOMER: клиенту customer-2 отправлено уведомление PAYMENT_COMPLETED (статус платежа COMPLETED)
+2026-11-09 13:07:49.188 INFO  [release-limits_0] saga: payment=73db60a6 job=2251799813685573 RELEASE_LIMITS: резерв лимита снят
+2026-11-09 13:07:49.213 INFO  [cancel-payment_0] saga: payment=73db60a6 job=2251799813685586 CANCEL_PAYMENT: компенсация завершена, причина DebitDeclined. COMPENSATING → REJECTED
+2026-11-09 13:07:49.232 INFO  [notify-customer_0] saga: payment=73db60a6 job=2251799813685595 NOTIFY_CUSTOMER: клиенту customer-4 отправлено уведомление PAYMENT_NOT_COMPLETED (статус платежа REJECTED)
+2026-11-09 13:07:50.207 INFO  [AnyIO worker thread] payment-service: payment=f780735d запущена Saga: processInstanceKey=2251799813685602, заказ order-A-fraud-deny-customer-5, сумма 9900.00 RUB, сценарий fraud-deny
+2026-11-09 13:07:50.218 INFO  [create-payment_0] saga: payment=f780735d job=2251799813685617 CREATE_PAYMENT: платёж на 9900.0 RUB по заказу order-A-fraud-deny-customer-5 создан, статус CREATED
+2026-11-09 13:07:50.249 INFO  [reserve-limits_0] saga: payment=f780735d job=2251799813685624 RESERVE_LIMITS: зарезервировано 9900.00, использовано за сутки 9900. CREATED → LIMITS_RESERVED
+2026-11-09 13:07:50.276 INFO  [debit-funds_0] saga: payment=f780735d job=2251799813685631 DEBIT_FUNDS: списано 9900.00 RUB: customer:customer-5 → транзитный счёт (ключ debit:f780735d-f35b-4367-b684-c053da872821). DEBIT_PENDING → DEBITED
+2026-11-09 13:07:50.299 INFO  [fraud-check_0] saga: payment=f780735d job=2251799813685639 FRAUD_CHECK: запрос в FraudCheck Service. DEBITED → FRAUD_CHECK_PENDING
+2026-11-09 13:07:50.299 INFO  [fraud-check_0] saga: payment=f780735d job=2251799813685639 FRAUD_CHECK: решение DENY (risk score 0.97, правила + провайдеры): AML: контрагент в санкционном списке
+2026-11-09 13:07:50.320 INFO  [fraud-check_0] saga: payment=f780735d job=2251799813685639 FRAUD_CHECK: FRAUD_CHECK_PENDING → COMPENSATING
+2026-11-09 13:07:50.328 INFO  [notify-security_0] saga: payment=f780735d job=2251799813685657 NOTIFY_SECURITY: служба безопасности уведомлена: клиент customer-5, сумма 9900.00, источник решения AUTO, risk score 0.97, причина «AML: контрагент в санкционном списке»
+2026-11-09 13:07:50.337 INFO  [refund-funds_0] saga: payment=f780735d job=2251799813685660 REFUND_FUNDS: возвращено 9900.00 RUB клиенту customer:customer-5 с транзитного счёта (ключ refund:f780735d-f35b-4367-b684-c053da872821)
+2026-11-09 13:07:50.356 INFO  [release-limits_0] saga: payment=f780735d job=2251799813685673 RELEASE_LIMITS: резерв лимита снят
+2026-11-09 13:07:50.381 INFO  [cancel-payment_0] saga: payment=f780735d job=2251799813685681 CANCEL_PAYMENT: компенсация завершена, причина FraudCheckDenied. COMPENSATING → BLOCKED
+2026-11-09 13:07:50.402 INFO  [notify-customer_0] saga: payment=f780735d job=2251799813685690 NOTIFY_CUSTOMER: клиенту customer-5 отправлено уведомление PAYMENT_NOT_COMPLETED (статус платежа BLOCKED)
+2026-11-09 13:07:51.325 INFO  [AnyIO worker thread] payment-service: payment=c6904962 запущена Saga: processInstanceKey=2251799813685696, заказ order-A-fraud-timeout-customer-6, сумма 1200.00 RUB, сценарий fraud-timeout
+2026-11-09 13:07:51.345 INFO  [create-payment_0] saga: payment=c6904962 job=2251799813685711 CREATE_PAYMENT: платёж на 1200.0 RUB по заказу order-A-fraud-timeout-customer-6 создан, статус CREATED
+2026-11-09 13:07:51.379 INFO  [reserve-limits_0] saga: payment=c6904962 job=2251799813685718 RESERVE_LIMITS: зарезервировано 1200.00, использовано за сутки 1200. CREATED → LIMITS_RESERVED
+2026-11-09 13:07:51.411 INFO  [debit-funds_0] saga: payment=c6904962 job=2251799813685725 DEBIT_FUNDS: списано 1200.00 RUB: customer:customer-6 → транзитный счёт (ключ debit:c6904962-8f79-41b0-ac13-34b604245e2e). DEBIT_PENDING → DEBITED
+2026-11-09 13:07:51.438 INFO  [fraud-check_0] saga: payment=c6904962 job=2251799813685733 FRAUD_CHECK: запрос в FraudCheck Service. DEBITED → FRAUD_CHECK_PENDING
+2026-11-09 13:07:51.438 INFO  [fraud-check_0] saga: payment=c6904962 job=2251799813685733 FRAUD_CHECK: внешний провайдер не отвечает, ответ придёт через 6 с (cut-off 3 с)
+2026-11-09 13:07:54.491 INFO  [transfer-to-merchant_0] saga: payment=c6904962 job=2251799813685747 TRANSFER_TO_MERCHANT: решение по антифроду: FraudCheckCutOffExpired. FRAUD_CHECK_PENDING → APPROVED
+2026-11-09 13:07:54.516 INFO  [transfer-to-merchant_0] saga: payment=c6904962 job=2251799813685747 TRANSFER_TO_MERCHANT: переведено 1200.00 RUB контрагенту merchant:merchant-7 (ключ transfer:c6904962-8f79-41b0-ac13-34b604245e2e). PIVOT пройден: TRANSFER_PENDING → TRANSFERRED
+2026-11-09 13:07:54.539 INFO  [complete-payment_0] saga: payment=c6904962 job=2251799813685753 COMPLETE_PAYMENT: платёж проведён, событие PaymentCompleted отправлено в «Финансы». TRANSFERRED → COMPLETED
+2026-11-09 13:07:54.558 INFO  [notify-customer_0] saga: payment=c6904962 job=2251799813685759 NOTIFY_CUSTOMER: клиенту customer-6 отправлено уведомление PAYMENT_COMPLETED (статус платежа COMPLETED)
+2026-11-09 13:07:55.606 INFO  [AnyIO worker thread] payment-service: payment=c6af38f8 запущена Saga: processInstanceKey=2251799813685769, заказ order-A-transfer-rejected-customer-7, сумма 5600.00 RUB, сценарий transfer-rejected
+2026-11-09 13:07:55.623 INFO  [create-payment_0] saga: payment=c6af38f8 job=2251799813685784 CREATE_PAYMENT: платёж на 5600.0 RUB по заказу order-A-transfer-rejected-customer-7 создан, статус CREATED
+2026-11-09 13:07:55.648 INFO  [reserve-limits_0] saga: payment=c6af38f8 job=2251799813685791 RESERVE_LIMITS: зарезервировано 5600.00, использовано за сутки 5600. CREATED → LIMITS_RESERVED
+2026-11-09 13:07:55.679 INFO  [debit-funds_0] saga: payment=c6af38f8 job=2251799813685798 DEBIT_FUNDS: списано 5600.00 RUB: customer:customer-7 → транзитный счёт (ключ debit:c6af38f8-047c-44be-8d25-58c52e492961). DEBIT_PENDING → DEBITED
+2026-11-09 13:07:55.703 INFO  [fraud-check_1] saga: payment=c6af38f8 job=2251799813685806 FRAUD_CHECK: запрос в FraudCheck Service. DEBITED → FRAUD_CHECK_PENDING
+2026-11-09 13:07:55.704 INFO  [fraud-check_1] saga: payment=c6af38f8 job=2251799813685806 FRAUD_CHECK: решение ALLOW (risk score 0.05, правила + провайдеры): правила и провайдеры не нашли рисков
+2026-11-09 13:07:55.720 INFO  [fraud-check_1] saga: payment=c6af38f8 job=2251799813685806 FRAUD_CHECK: FRAUD_CHECK_PENDING → APPROVED
+2026-11-09 13:07:55.734 INFO  [transfer-to-merchant_0] saga: payment=c6af38f8 job=2251799813685819 TRANSFER_TO_MERCHANT: банк отклонил перевод: счёт контрагента закрыт. TRANSFER_PENDING → COMPENSATING (pivot не пройден)
+2026-11-09 13:07:55.734 WARNING [transfer-to-merchant_0] worker: job=2251799813685819 Task_TransferToMerchant: бизнес-отказ TRANSFER_REJECTED (счёт контрагента закрыт) → BPMN error, запуск компенсации
+2026-11-09 13:07:55.759 INFO  [refund-funds_0] saga: payment=c6af38f8 job=2251799813685833 REFUND_FUNDS: возвращено 5600.00 RUB клиенту customer:customer-7 с транзитного счёта (ключ refund:c6af38f8-047c-44be-8d25-58c52e492961)
+2026-11-09 13:07:55.777 INFO  [release-limits_0] saga: payment=c6af38f8 job=2251799813685841 RELEASE_LIMITS: резерв лимита снят
+2026-11-09 13:07:55.801 INFO  [cancel-payment_0] saga: payment=c6af38f8 job=2251799813685849 CANCEL_PAYMENT: компенсация завершена, причина TransferRejected. COMPENSATING → CANCELLED
+2026-11-09 13:07:55.822 INFO  [notify-customer_0] saga: payment=c6af38f8 job=2251799813685858 NOTIFY_CUSTOMER: клиенту customer-7 отправлено уведомление PAYMENT_NOT_COMPLETED (статус платежа CANCELLED)
+2026-11-09 13:07:57.440 INFO  [fraud-check_0] saga: payment=c6904962 job=2251799813685733 FRAUD_CHECK: решение ALLOW (risk score 0.05, правила + провайдеры): правила и провайдеры не нашли рисков
+2026-11-09 13:07:57.465 WARNING [fraud-check_0] worker: job=2251799813685733 Task_FraudCheck: job уже не активен (сработало граничное событие), результат отброшен
+2026-11-09 13:07:57.465 INFO  [fraud-check_0] saga: payment=c6904962 job=2251799813685733 FRAUD_CHECK: поздний ответ ALLOW пришёл после cut-off: платёж уже разрешён по умолчанию; при «Запрете» стартует пост-фактум возврат (вне этой Saga)
+2026-11-09 13:08:06.880 INFO  [AnyIO worker thread] payment-service: payment=424b287b запущена Saga: processInstanceKey=2251799813685886, заказ order-B-manual-review-customer-11, сумма 84000.00 RUB, сценарий manual-review
+2026-11-09 13:08:06.895 INFO  [create-payment_0] saga: payment=424b287b job=2251799813685901 CREATE_PAYMENT: платёж на 84000.0 RUB по заказу order-B-manual-review-customer-11 создан, статус CREATED
+2026-11-09 13:08:06.907 INFO  [AnyIO worker thread] payment-service: payment=da33084b запущена Saga: processInstanceKey=2251799813685909, заказ order-B-manual-review-customer-12, сумма 120000.00 RUB, сценарий manual-review
+2026-11-09 13:08:06.921 INFO  [create-payment_0] saga: payment=da33084b job=2251799813685924 CREATE_PAYMENT: платёж на 120000.0 RUB по заказу order-B-manual-review-customer-12 создан, статус CREATED
+2026-11-09 13:08:06.927 INFO  [reserve-limits_0] saga: payment=424b287b job=2251799813685908 RESERVE_LIMITS: зарезервировано 84000.00, использовано за сутки 84000. CREATED → LIMITS_RESERVED
+2026-11-09 13:08:06.937 INFO  [AnyIO worker thread] payment-service: payment=f6aa80fd запущена Saga: processInstanceKey=2251799813685934, заказ order-B-customer-cancel-customer-13, сумма 47000.00 RUB, сценарий customer-cancel
+2026-11-09 13:08:06.957 INFO  [create-payment_0] saga: payment=f6aa80fd job=2251799813685949 CREATE_PAYMENT: платёж на 47000.0 RUB по заказу order-B-customer-cancel-customer-13 создан, статус CREATED
+2026-11-09 13:08:06.962 INFO  [AnyIO worker thread] payment-service: payment=d0eecf91 запущена Saga: processInstanceKey=2251799813685961, заказ order-B-manual-cut-off-customer-14, сумма 66000.00 RUB, сценарий manual-cut-off
+2026-11-09 13:08:06.966 INFO  [reserve-limits_0] saga: payment=da33084b job=2251799813685933 RESERVE_LIMITS: зарезервировано 120000.00, использовано за сутки 120000. CREATED → LIMITS_RESERVED
+2026-11-09 13:08:06.985 INFO  [debit-funds_0] saga: payment=424b287b job=2251799813685954 DEBIT_FUNDS: списано 84000.00 RUB: customer:customer-11 → транзитный счёт (ключ debit:424b287b-dd85-4829-a745-4667d11ae86a). DEBIT_PENDING → DEBITED
+2026-11-09 13:08:06.986 INFO  [create-payment_0] saga: payment=d0eecf91 job=2251799813685976 CREATE_PAYMENT: платёж на 66000.0 RUB по заказу order-B-manual-cut-off-customer-14 создан, статус CREATED
+2026-11-09 13:08:07.002 INFO  [reserve-limits_1] saga: payment=f6aa80fd job=2251799813685981 RESERVE_LIMITS: зарезервировано 47000.00, использовано за сутки 47000. CREATED → LIMITS_RESERVED
+2026-11-09 13:08:07.027 INFO  [fraud-check_1] saga: payment=424b287b job=2251799813685997 FRAUD_CHECK: запрос в FraudCheck Service. DEBITED → FRAUD_CHECK_PENDING
+2026-11-09 13:08:07.028 INFO  [fraud-check_1] saga: payment=424b287b job=2251799813685997 FRAUD_CHECK: решение MANUAL_REVIEW (risk score 0.64, правила + провайдеры): GeoRisk: вход из новой страны и сумма выше обычной в 6 раз
+2026-11-09 13:08:07.031 INFO  [reserve-limits_0] saga: payment=d0eecf91 job=2251799813686002 RESERVE_LIMITS: зарезервировано 66000.00, использовано за сутки 66000. CREATED → LIMITS_RESERVED
+2026-11-09 13:08:07.034 INFO  [debit-funds_1] saga: payment=da33084b job=2251799813685988 DEBIT_FUNDS: списано 120000.00 RUB: customer:customer-12 → транзитный счёт (ключ debit:da33084b-3e2f-401e-8e4b-2bbd23a09eea). DEBIT_PENDING → DEBITED
+2026-11-09 13:08:07.061 INFO  [debit-funds_0] saga: payment=f6aa80fd job=2251799813686010 DEBIT_FUNDS: списано 47000.00 RUB: customer:customer-13 → транзитный счёт (ключ debit:f6aa80fd-125c-488a-b6ef-df8bcae88c3f). DEBIT_PENDING → DEBITED
+2026-11-09 13:08:07.078 INFO  [fraud-check_1] saga: payment=424b287b job=2251799813685997 FRAUD_CHECK: FRAUD_CHECK_PENDING → MANUAL_REVIEW
+2026-11-09 13:08:07.100 INFO  [fraud-check_0] saga: payment=da33084b job=2251799813686037 FRAUD_CHECK: запрос в FraudCheck Service. DEBITED → FRAUD_CHECK_PENDING
+2026-11-09 13:08:07.101 INFO  [fraud-check_0] saga: payment=da33084b job=2251799813686037 FRAUD_CHECK: решение MANUAL_REVIEW (risk score 0.64, правила + провайдеры): GeoRisk: вход из новой страны и сумма выше обычной в 6 раз
+2026-11-09 13:08:07.103 INFO  [fraud-check_1] saga: payment=f6aa80fd job=2251799813686043 FRAUD_CHECK: запрос в FraudCheck Service. DEBITED → FRAUD_CHECK_PENDING
+2026-11-09 13:08:07.104 INFO  [fraud-check_1] saga: payment=f6aa80fd job=2251799813686043 FRAUD_CHECK: решение MANUAL_REVIEW (risk score 0.64, правила + провайдеры): GeoRisk: вход из новой страны и сумма выше обычной в 6 раз
+2026-11-09 13:08:07.111 INFO  [debit-funds_1] saga: payment=d0eecf91 job=2251799813686031 DEBIT_FUNDS: списано 66000.00 RUB: customer:customer-14 → транзитный счёт (ключ debit:d0eecf91-c805-40ae-87df-687acd494b0b). DEBIT_PENDING → DEBITED
+2026-11-09 13:08:07.119 INFO  [fraud-check_0] saga: payment=da33084b job=2251799813686037 FRAUD_CHECK: FRAUD_CHECK_PENDING → MANUAL_REVIEW
+2026-11-09 13:08:07.127 INFO  [fraud-check_1] saga: payment=f6aa80fd job=2251799813686043 FRAUD_CHECK: FRAUD_CHECK_PENDING → MANUAL_REVIEW
+2026-11-09 13:08:07.137 INFO  [fraud-check_0] saga: payment=d0eecf91 job=2251799813686077 FRAUD_CHECK: запрос в FraudCheck Service. DEBITED → FRAUD_CHECK_PENDING
+2026-11-09 13:08:07.137 INFO  [fraud-check_0] saga: payment=d0eecf91 job=2251799813686077 FRAUD_CHECK: решение MANUAL_REVIEW (risk score 0.64, правила + провайдеры): GeoRisk: вход из новой страны и сумма выше обычной в 6 раз
+2026-11-09 13:08:07.150 INFO  [fraud-check_0] saga: payment=d0eecf91 job=2251799813686077 FRAUD_CHECK: FRAUD_CHECK_PENDING → MANUAL_REVIEW
+2026-11-09 13:08:21.779 INFO  [AnyIO worker thread] payment-service: payment=f6aa80fd клиент отменил платёж, сообщение CustomerCancelled доставлено в процесс 2251799813685934
+2026-11-09 13:08:21.809 INFO  [refund-funds_0] saga: payment=f6aa80fd job=2251799813686135 Task_RefundFunds: старт компенсации, причина CustomerCancelled. MANUAL_REVIEW → COMPENSATING
+2026-11-09 13:08:21.837 INFO  [refund-funds_0] saga: payment=f6aa80fd job=2251799813686135 REFUND_FUNDS: возвращено 47000.00 RUB клиенту customer:customer-13 с транзитного счёта (ключ refund:f6aa80fd-125c-488a-b6ef-df8bcae88c3f)
+2026-11-09 13:08:21.906 INFO  [release-limits_0] saga: payment=f6aa80fd job=2251799813686143 RELEASE_LIMITS: резерв лимита снят
+2026-11-09 13:08:21.974 INFO  [cancel-payment_0] saga: payment=f6aa80fd job=2251799813686151 CANCEL_PAYMENT: компенсация завершена, причина CustomerCancelled. COMPENSATING → CANCELLED
+2026-11-09 13:08:22.066 INFO  [notify-customer_0] saga: payment=f6aa80fd job=2251799813686160 NOTIFY_CUSTOMER: клиенту customer-13 отправлено уведомление PAYMENT_NOT_COMPLETED (статус платежа CANCELLED)
+2026-11-09 13:08:27.500 INFO  [transfer-to-merchant_0] saga: payment=424b287b job=2251799813686201 TRANSFER_TO_MERCHANT: решение по антифроду: OperatorApproved. MANUAL_REVIEW → APPROVED
+2026-11-09 13:08:27.520 INFO  [transfer-to-merchant_0] saga: payment=424b287b job=2251799813686201 TRANSFER_TO_MERCHANT: переведено 84000.00 RUB контрагенту merchant:merchant-7 (ключ transfer:424b287b-dd85-4829-a745-4667d11ae86a). PIVOT пройден: TRANSFER_PENDING → TRANSFERRED
+2026-11-09 13:08:27.555 INFO  [complete-payment_0] saga: payment=424b287b job=2251799813686207 COMPLETE_PAYMENT: платёж проведён, событие PaymentCompleted отправлено в «Финансы». TRANSFERRED → COMPLETED
+2026-11-09 13:08:27.573 INFO  [notify-customer_0] saga: payment=424b287b job=2251799813686213 NOTIFY_CUSTOMER: клиенту customer-11 отправлено уведомление PAYMENT_COMPLETED (статус платежа COMPLETED)
+2026-11-09 13:08:36.093 INFO  [notify-security_0] saga: payment=da33084b job=2251799813686256 NOTIFY_SECURITY: служба безопасности уведомлена: клиент customer-12, сумма 120000.00, источник решения OPERATOR, risk score 0.64, причина «GeoRisk: вход из новой страны и сумма выше обычной в 6 раз»
+2026-11-09 13:08:36.101 INFO  [refund-funds_0] saga: payment=da33084b job=2251799813686259 Task_RefundFunds: старт компенсации, причина OperatorDenied. MANUAL_REVIEW → COMPENSATING
+2026-11-09 13:08:36.115 INFO  [refund-funds_0] saga: payment=da33084b job=2251799813686259 REFUND_FUNDS: возвращено 120000.00 RUB клиенту customer:customer-12 с транзитного счёта (ключ refund:da33084b-3e2f-401e-8e4b-2bbd23a09eea)
+2026-11-09 13:08:36.134 INFO  [release-limits_0] saga: payment=da33084b job=2251799813686272 RELEASE_LIMITS: резерв лимита снят
+2026-11-09 13:08:36.157 INFO  [cancel-payment_0] saga: payment=da33084b job=2251799813686280 CANCEL_PAYMENT: компенсация завершена, причина OperatorDenied. COMPENSATING → BLOCKED
+2026-11-09 13:08:36.176 INFO  [notify-customer_0] saga: payment=da33084b job=2251799813686289 NOTIFY_CUSTOMER: клиенту customer-12 отправлено уведомление PAYMENT_NOT_COMPLETED (статус платежа BLOCKED)
+2026-11-09 13:08:37.608 INFO  [transfer-to-merchant_0] saga: payment=d0eecf91 job=2251799813686311 TRANSFER_TO_MERCHANT: решение по антифроду: ManualReviewCutOffExpired. MANUAL_REVIEW → APPROVED
+2026-11-09 13:08:37.624 INFO  [transfer-to-merchant_0] saga: payment=d0eecf91 job=2251799813686311 TRANSFER_TO_MERCHANT: переведено 66000.00 RUB контрагенту merchant:merchant-7 (ключ transfer:d0eecf91-c805-40ae-87df-687acd494b0b). PIVOT пройден: TRANSFER_PENDING → TRANSFERRED
+2026-11-09 13:08:37.647 INFO  [complete-payment_0] saga: payment=d0eecf91 job=2251799813686317 COMPLETE_PAYMENT: платёж проведён, событие PaymentCompleted отправлено в «Финансы». TRANSFERRED → COMPLETED
+2026-11-09 13:08:37.666 INFO  [notify-customer_0] saga: payment=d0eecf91 job=2251799813686323 NOTIFY_CUSTOMER: клиенту customer-14 отправлено уведомление PAYMENT_COMPLETED (статус платежа COMPLETED)

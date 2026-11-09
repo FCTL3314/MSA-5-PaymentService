@@ -1,0 +1,678 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:modeler="http://camunda.org/schema/modeler/1.0"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  id="Definitions_PaymentSaga"
+                  targetNamespace="http://orchestrpay.example/bpmn"
+                  exporter="hand-written"
+                  exporterVersion="1.0"
+                  modeler:executionPlatform="Camunda Cloud"
+                  modeler:executionPlatformVersion="8.9.0">
+
+  <bpmn:message id="Message_CustomerCancelled" name="CustomerCancelled">
+    <bpmn:extensionElements>
+      <zeebe:subscription correlationKey="=paymentId" />
+    </bpmn:extensionElements>
+  </bpmn:message>
+  <bpmn:error id="Error_LimitExceeded" name="Лимит превышен" errorCode="LIMIT_EXCEEDED" />
+  <bpmn:error id="Error_DebitDeclined" name="Банк отказал в списании" errorCode="DEBIT_DECLINED" />
+  <bpmn:error id="Error_TransferRejected" name="Перевод отклонён" errorCode="TRANSFER_REJECTED" />
+
+  <bpmn:process id="payment-saga" name="Обработка платежа OrchestrPay (Saga-оркестрация)" isExecutable="true">
+
+    <!-- ===================== Основной поток ===================== -->
+    <bpmn:startEvent id="Start_PaymentInitiated" name="Платёж инициирован">
+      <bpmn:outgoing>Flow_Start_Create</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <bpmn:serviceTask id="Task_CreatePayment" name="Создать платёж&#10;CREATE_PAYMENT">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="create-payment" retries="5" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_Start_Create</bpmn:incoming>
+      <bpmn:outgoing>Flow_Create_Limits</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="Task_ReserveLimits" name="Зарезервировать лимиты&#10;RESERVE_LIMITS">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="reserve-limits" retries="5" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_Create_Limits</bpmn:incoming>
+      <bpmn:outgoing>Flow_Limits_Debit</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="Task_DebitFunds" name="Списать деньги клиента&#10;DEBIT_FUNDS">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="debit-funds" retries="5" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_Limits_Debit</bpmn:incoming>
+      <bpmn:outgoing>Flow_Debit_Fraud</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="Task_FraudCheck" name="Антифрод-проверка&#10;FRAUD_CHECK">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="fraud-check" retries="3" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_Debit_Fraud</bpmn:incoming>
+      <bpmn:outgoing>Flow_Fraud_Decision</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:exclusiveGateway id="Gateway_FraudDecision" name="Решение антифрода?" default="Flow_Decision_Deny">
+      <bpmn:incoming>Flow_Fraud_Decision</bpmn:incoming>
+      <bpmn:outgoing>Flow_Decision_Allow</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Decision_Manual</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Decision_Deny</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:userTask id="Task_ManualReview" name="Ручная проверка оператором&#10;MANUAL_FRAUD_REVIEW">
+      <bpmn:extensionElements>
+        <zeebe:userTask />
+        <zeebe:formDefinition formId="manual-review-form" />
+        <zeebe:assignmentDefinition candidateGroups="fraud-operators" />
+        <zeebe:priorityDefinition priority="80" />
+        <zeebe:taskSchedule dueDate="=now() + duration(manualReviewTimeout)" />
+        <zeebe:ioMapping>
+          <zeebe:output source="=fraudDecision" target="fraudDecision" />
+          <zeebe:output source="=operatorComment" target="operatorComment" />
+          <zeebe:output source="=&quot;OPERATOR&quot;" target="fraudDecisionSource" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_Decision_Manual</bpmn:incoming>
+      <bpmn:outgoing>Flow_Manual_OperatorDecision</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:exclusiveGateway id="Gateway_OperatorDecision" name="Решение оператора?" default="Flow_Operator_Deny">
+      <bpmn:incoming>Flow_Manual_OperatorDecision</bpmn:incoming>
+      <bpmn:incoming>Flow_ManualCutOff_OperatorDecision</bpmn:incoming>
+      <bpmn:outgoing>Flow_Operator_Allow</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Operator_Deny</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:intermediateThrowEvent id="Event_FraudCutOffAllow" name="Разрешено по cut-off">
+      <bpmn:extensionElements>
+        <zeebe:ioMapping>
+          <zeebe:output source="=&quot;ALLOW&quot;" target="fraudDecision" />
+          <zeebe:output source="=&quot;CUT_OFF&quot;" target="fraudDecisionSource" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_FraudCutOff_Event</bpmn:incoming>
+      <bpmn:outgoing>Flow_FraudCutOff_AllowMerge</bpmn:outgoing>
+    </bpmn:intermediateThrowEvent>
+
+    <bpmn:intermediateThrowEvent id="Event_ManualCutOffAllow" name="Разрешено по cut-off">
+      <bpmn:extensionElements>
+        <zeebe:ioMapping>
+          <zeebe:output source="=&quot;ALLOW&quot;" target="fraudDecision" />
+          <zeebe:output source="=&quot;CUT_OFF&quot;" target="fraudDecisionSource" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ManualCutOff_Event</bpmn:incoming>
+      <bpmn:outgoing>Flow_ManualCutOff_OperatorDecision</bpmn:outgoing>
+    </bpmn:intermediateThrowEvent>
+
+    <bpmn:exclusiveGateway id="Gateway_AllowMerge">
+      <bpmn:incoming>Flow_Decision_Allow</bpmn:incoming>
+      <bpmn:incoming>Flow_FraudCutOff_AllowMerge</bpmn:incoming>
+      <bpmn:incoming>Flow_Operator_Allow</bpmn:incoming>
+      <bpmn:outgoing>Flow_AllowMerge_Transfer</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:serviceTask id="Task_TransferToMerchant" name="Перевести деньги контрагенту&#10;TRANSFER_TO_MERCHANT">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="transfer-to-merchant" retries="5" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_AllowMerge_Transfer</bpmn:incoming>
+      <bpmn:outgoing>Flow_Transfer_Complete</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="Task_CompletePayment" name="Завершить платёж&#10;COMPLETE_PAYMENT">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="complete-payment" retries="10" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_Transfer_Complete</bpmn:incoming>
+      <bpmn:outgoing>Flow_Complete_Notify</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="Task_NotifySuccess" name="Уведомить об оплате&#10;NOTIFY_CUSTOMER">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="notify-customer" retries="10" />
+        <zeebe:taskHeaders>
+          <zeebe:header key="template" value="PAYMENT_COMPLETED" />
+        </zeebe:taskHeaders>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_Complete_Notify</bpmn:incoming>
+      <bpmn:outgoing>Flow_Notify_End</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="End_PaymentCompleted" name="Платёж проведён">
+      <bpmn:incoming>Flow_Notify_End</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <!-- ===================== Граничные события ===================== -->
+    <bpmn:boundaryEvent id="Boundary_CompCreatePayment" attachedToRef="Task_CreatePayment">
+      <bpmn:compensateEventDefinition id="CompDef_CreatePayment" />
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="Boundary_CompReserveLimits" attachedToRef="Task_ReserveLimits">
+      <bpmn:compensateEventDefinition id="CompDef_ReserveLimits" />
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="Boundary_CompDebitFunds" attachedToRef="Task_DebitFunds">
+      <bpmn:compensateEventDefinition id="CompDef_DebitFunds" />
+    </bpmn:boundaryEvent>
+
+    <bpmn:boundaryEvent id="Boundary_LimitExceeded" name="Лимит превышен" attachedToRef="Task_ReserveLimits">
+      <bpmn:outgoing>Flow_LimitExceeded_Link</bpmn:outgoing>
+      <bpmn:errorEventDefinition id="ErrDef_LimitExceeded" errorRef="Error_LimitExceeded" />
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="Boundary_DebitDeclined" name="Банк отказал" attachedToRef="Task_DebitFunds">
+      <bpmn:outgoing>Flow_DebitDeclined_Link</bpmn:outgoing>
+      <bpmn:errorEventDefinition id="ErrDef_DebitDeclined" errorRef="Error_DebitDeclined" />
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="Boundary_FraudCutOff" name="Cut-off" attachedToRef="Task_FraudCheck">
+      <bpmn:outgoing>Flow_FraudCutOff_Event</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerDef_FraudCutOff">
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">=fraudCheckCutOff</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="Boundary_CustomerCancelled" name="Клиент отменил платёж" attachedToRef="Task_ManualReview">
+      <bpmn:outgoing>Flow_CustomerCancelled_Link</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_CustomerCancelled" messageRef="Message_CustomerCancelled" />
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="Boundary_ManualCutOff" name="20 минут" attachedToRef="Task_ManualReview">
+      <bpmn:outgoing>Flow_ManualCutOff_Event</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerDef_ManualCutOff">
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">=manualReviewTimeout</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="Boundary_TransferRejected" name="Перевод отклонён" attachedToRef="Task_TransferToMerchant">
+      <bpmn:outgoing>Flow_TransferRejected_Link</bpmn:outgoing>
+      <bpmn:errorEventDefinition id="ErrDef_TransferRejected" errorRef="Error_TransferRejected" />
+    </bpmn:boundaryEvent>
+
+    <!-- ===================== Компенсирующие обработчики ===================== -->
+    <bpmn:serviceTask id="Task_CancelPayment" name="Отменить платёж&#10;CANCEL_PAYMENT" isForCompensation="true">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="cancel-payment" retries="10" />
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_ReleaseLimits" name="Снять резерв лимитов&#10;RELEASE_LIMITS" isForCompensation="true">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="release-limits" retries="10" />
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_RefundFunds" name="Вернуть деньги клиенту&#10;REFUND_FUNDS" isForCompensation="true">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="refund-funds" retries="10" />
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+
+    <!-- ===================== Переходы к компенсации (link events) ===================== -->
+    <bpmn:intermediateThrowEvent id="Link_FromLimits" name="Компенсация">
+      <bpmn:incoming>Flow_LimitExceeded_Link</bpmn:incoming>
+      <bpmn:linkEventDefinition id="LinkDef_FromLimits" name="compensation" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:intermediateThrowEvent id="Link_FromDebit" name="Компенсация">
+      <bpmn:incoming>Flow_DebitDeclined_Link</bpmn:incoming>
+      <bpmn:linkEventDefinition id="LinkDef_FromDebit" name="compensation" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:intermediateThrowEvent id="Link_FromFraudDeny" name="Компенсация">
+      <bpmn:incoming>Flow_Decision_Deny</bpmn:incoming>
+      <bpmn:linkEventDefinition id="LinkDef_FromFraudDeny" name="compensation" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:intermediateThrowEvent id="Link_FromCustomerCancel" name="Компенсация">
+      <bpmn:incoming>Flow_CustomerCancelled_Link</bpmn:incoming>
+      <bpmn:linkEventDefinition id="LinkDef_FromCustomerCancel" name="compensation" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:intermediateThrowEvent id="Link_FromOperatorDeny" name="Компенсация">
+      <bpmn:incoming>Flow_Operator_Deny</bpmn:incoming>
+      <bpmn:linkEventDefinition id="LinkDef_FromOperatorDeny" name="compensation" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:intermediateThrowEvent id="Link_FromTransfer" name="Компенсация">
+      <bpmn:incoming>Flow_TransferRejected_Link</bpmn:incoming>
+      <bpmn:linkEventDefinition id="LinkDef_FromTransfer" name="compensation" />
+    </bpmn:intermediateThrowEvent>
+
+    <!-- ===================== Компенсация ===================== -->
+    <bpmn:intermediateCatchEvent id="Link_CompensationStart" name="Компенсация">
+      <bpmn:outgoing>Flow_CompStart_Split</bpmn:outgoing>
+      <bpmn:linkEventDefinition id="LinkDef_CompensationStart" name="compensation" />
+    </bpmn:intermediateCatchEvent>
+
+    <bpmn:inclusiveGateway id="Gateway_CompSplit">
+      <bpmn:incoming>Flow_CompStart_Split</bpmn:incoming>
+      <bpmn:outgoing>Flow_Split_Refund</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Split_Security</bpmn:outgoing>
+    </bpmn:inclusiveGateway>
+
+    <bpmn:intermediateThrowEvent id="Event_CompRefund" name="Вернуть деньги">
+      <bpmn:incoming>Flow_Split_Refund</bpmn:incoming>
+      <bpmn:outgoing>Flow_CompRefund_CompLimits</bpmn:outgoing>
+      <bpmn:compensateEventDefinition id="CompThrow_DebitFunds" activityRef="Task_DebitFunds" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:intermediateThrowEvent id="Event_CompLimits" name="Снять резерв лимитов">
+      <bpmn:incoming>Flow_CompRefund_CompLimits</bpmn:incoming>
+      <bpmn:outgoing>Flow_CompLimits_CompPayment</bpmn:outgoing>
+      <bpmn:compensateEventDefinition id="CompThrow_ReserveLimits" activityRef="Task_ReserveLimits" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:intermediateThrowEvent id="Event_CompPayment" name="Отменить платёж">
+      <bpmn:incoming>Flow_CompLimits_CompPayment</bpmn:incoming>
+      <bpmn:outgoing>Flow_CompPayment_Join</bpmn:outgoing>
+      <bpmn:compensateEventDefinition id="CompThrow_CreatePayment" activityRef="Task_CreatePayment" />
+    </bpmn:intermediateThrowEvent>
+
+    <bpmn:serviceTask id="Task_NotifySecurity" name="Уведомить СБ&#10;NOTIFY_SECURITY">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="notify-security" retries="10" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_Split_Security</bpmn:incoming>
+      <bpmn:outgoing>Flow_Security_Join</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:inclusiveGateway id="Gateway_CompJoin">
+      <bpmn:incoming>Flow_CompPayment_Join</bpmn:incoming>
+      <bpmn:incoming>Flow_Security_Join</bpmn:incoming>
+      <bpmn:outgoing>Flow_Join_NotifyFailure</bpmn:outgoing>
+    </bpmn:inclusiveGateway>
+
+    <bpmn:serviceTask id="Task_NotifyFailure" name="Уведомить об отмене&#10;NOTIFY_CUSTOMER">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="notify-customer" retries="10" />
+        <zeebe:taskHeaders>
+          <zeebe:header key="template" value="PAYMENT_NOT_COMPLETED" />
+        </zeebe:taskHeaders>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_Join_NotifyFailure</bpmn:incoming>
+      <bpmn:outgoing>Flow_NotifyFailure_End</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="End_PaymentNotCompleted" name="Платёж не проведён, деньги возвращены">
+      <bpmn:incoming>Flow_NotifyFailure_End</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <!-- ===================== Последовательности ===================== -->
+    <bpmn:sequenceFlow id="Flow_Start_Create" sourceRef="Start_PaymentInitiated" targetRef="Task_CreatePayment" />
+    <bpmn:sequenceFlow id="Flow_Create_Limits" sourceRef="Task_CreatePayment" targetRef="Task_ReserveLimits" />
+    <bpmn:sequenceFlow id="Flow_Limits_Debit" sourceRef="Task_ReserveLimits" targetRef="Task_DebitFunds" />
+    <bpmn:sequenceFlow id="Flow_Debit_Fraud" sourceRef="Task_DebitFunds" targetRef="Task_FraudCheck" />
+    <bpmn:sequenceFlow id="Flow_Fraud_Decision" sourceRef="Task_FraudCheck" targetRef="Gateway_FraudDecision" />
+    <bpmn:sequenceFlow id="Flow_Decision_Allow" name="Разрешение" sourceRef="Gateway_FraudDecision" targetRef="Gateway_AllowMerge">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=fraudDecision = "ALLOW"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Decision_Manual" name="Ручная проверка" sourceRef="Gateway_FraudDecision" targetRef="Task_ManualReview">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=fraudDecision = "MANUAL_REVIEW"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Decision_Deny" name="Запрет" sourceRef="Gateway_FraudDecision" targetRef="Link_FromFraudDeny" />
+    <bpmn:sequenceFlow id="Flow_Manual_OperatorDecision" sourceRef="Task_ManualReview" targetRef="Gateway_OperatorDecision" />
+    <bpmn:sequenceFlow id="Flow_Operator_Allow" name="Разрешение" sourceRef="Gateway_OperatorDecision" targetRef="Gateway_AllowMerge">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=fraudDecision = "ALLOW"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Operator_Deny" name="Запрет" sourceRef="Gateway_OperatorDecision" targetRef="Link_FromOperatorDeny" />
+    <bpmn:sequenceFlow id="Flow_FraudCutOff_Event" sourceRef="Boundary_FraudCutOff" targetRef="Event_FraudCutOffAllow" />
+    <bpmn:sequenceFlow id="Flow_FraudCutOff_AllowMerge" sourceRef="Event_FraudCutOffAllow" targetRef="Gateway_AllowMerge" />
+    <bpmn:sequenceFlow id="Flow_ManualCutOff_Event" sourceRef="Boundary_ManualCutOff" targetRef="Event_ManualCutOffAllow" />
+    <bpmn:sequenceFlow id="Flow_ManualCutOff_OperatorDecision" sourceRef="Event_ManualCutOffAllow" targetRef="Gateway_OperatorDecision" />
+    <bpmn:sequenceFlow id="Flow_AllowMerge_Transfer" sourceRef="Gateway_AllowMerge" targetRef="Task_TransferToMerchant" />
+    <bpmn:sequenceFlow id="Flow_Transfer_Complete" sourceRef="Task_TransferToMerchant" targetRef="Task_CompletePayment" />
+    <bpmn:sequenceFlow id="Flow_Complete_Notify" sourceRef="Task_CompletePayment" targetRef="Task_NotifySuccess" />
+    <bpmn:sequenceFlow id="Flow_Notify_End" sourceRef="Task_NotifySuccess" targetRef="End_PaymentCompleted" />
+    <bpmn:sequenceFlow id="Flow_LimitExceeded_Link" sourceRef="Boundary_LimitExceeded" targetRef="Link_FromLimits" />
+    <bpmn:sequenceFlow id="Flow_DebitDeclined_Link" sourceRef="Boundary_DebitDeclined" targetRef="Link_FromDebit" />
+    <bpmn:sequenceFlow id="Flow_CustomerCancelled_Link" sourceRef="Boundary_CustomerCancelled" targetRef="Link_FromCustomerCancel" />
+    <bpmn:sequenceFlow id="Flow_TransferRejected_Link" sourceRef="Boundary_TransferRejected" targetRef="Link_FromTransfer" />
+    <bpmn:sequenceFlow id="Flow_CompStart_Split" sourceRef="Link_CompensationStart" targetRef="Gateway_CompSplit" />
+    <bpmn:sequenceFlow id="Flow_Split_Refund" name="всегда" sourceRef="Gateway_CompSplit" targetRef="Event_CompRefund">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=true</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Split_Security" name="Запрет антифрода" sourceRef="Gateway_CompSplit" targetRef="Task_NotifySecurity">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=fraudDecision = "DENY"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_CompRefund_CompLimits" sourceRef="Event_CompRefund" targetRef="Event_CompLimits" />
+    <bpmn:sequenceFlow id="Flow_CompLimits_CompPayment" sourceRef="Event_CompLimits" targetRef="Event_CompPayment" />
+    <bpmn:sequenceFlow id="Flow_CompPayment_Join" sourceRef="Event_CompPayment" targetRef="Gateway_CompJoin" />
+    <bpmn:sequenceFlow id="Flow_Security_Join" sourceRef="Task_NotifySecurity" targetRef="Gateway_CompJoin" />
+    <bpmn:sequenceFlow id="Flow_Join_NotifyFailure" sourceRef="Gateway_CompJoin" targetRef="Task_NotifyFailure" />
+    <bpmn:sequenceFlow id="Flow_NotifyFailure_End" sourceRef="Task_NotifyFailure" targetRef="End_PaymentNotCompleted" />
+
+    <bpmn:association id="Assoc_CompCreatePayment" associationDirection="One" sourceRef="Boundary_CompCreatePayment" targetRef="Task_CancelPayment" />
+    <bpmn:association id="Assoc_CompReserveLimits" associationDirection="One" sourceRef="Boundary_CompReserveLimits" targetRef="Task_ReleaseLimits" />
+    <bpmn:association id="Assoc_CompDebitFunds" associationDirection="One" sourceRef="Boundary_CompDebitFunds" targetRef="Task_RefundFunds" />
+
+    <!-- ===================== Аннотации ===================== -->
+    <bpmn:textAnnotation id="Note_Compensation">
+      <bpmn:text>Компенсирующие транзакции: идемпотентны и повторяются до успеха. Вызываются только для завершённых шагов</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Assoc_Note_Compensation" sourceRef="Note_Compensation" targetRef="Task_ReleaseLimits" />
+    <bpmn:textAnnotation id="Note_CutOff">
+      <bpmn:text>Cut-off-time: антифрод не ответил вовремя → разрешено по умолчанию. Поздний «Запрет» уходит в процесс пост-фактум возврата</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Assoc_Note_CutOff" sourceRef="Note_CutOff" targetRef="Event_FraudCutOffAllow" />
+    <bpmn:textAnnotation id="Note_Pivot">
+      <bpmn:text>Pivot-транзакция: после перевода откат невозможен</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Assoc_Note_Pivot" sourceRef="Note_Pivot" targetRef="Task_TransferToMerchant" />
+    <bpmn:textAnnotation id="Note_Retriable">
+      <bpmn:text>Повторяемые транзакции: retry с backoff, при исчерпании — инцидент в Operate</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Assoc_Note_Retriable" sourceRef="Note_Retriable" targetRef="Task_CompletePayment" />
+    <bpmn:textAnnotation id="Note_CompOrder">
+      <bpmn:text>Компенсация в обратном порядке. Возврат денег параллельно с уведомлением службы безопасности</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Assoc_Note_CompOrder" sourceRef="Note_CompOrder" targetRef="Gateway_CompSplit" />
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="Diagram_PaymentSaga">
+    <bpmndi:BPMNPlane id="Plane_PaymentSaga" bpmnElement="payment-saga">
+      <!-- Основной поток -->
+      <bpmndi:BPMNShape id="Start_PaymentInitiated_di" bpmnElement="Start_PaymentInitiated">
+        <dc:Bounds x="162" y="312" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="140" y="355" width="80" height="27" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_CreatePayment_di" bpmnElement="Task_CreatePayment">
+        <dc:Bounds x="250" y="290" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ReserveLimits_di" bpmnElement="Task_ReserveLimits">
+        <dc:Bounds x="460" y="290" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_DebitFunds_di" bpmnElement="Task_DebitFunds">
+        <dc:Bounds x="670" y="290" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_FraudCheck_di" bpmnElement="Task_FraudCheck">
+        <dc:Bounds x="880" y="290" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_FraudDecision_di" bpmnElement="Gateway_FraudDecision" isMarkerVisible="true">
+        <dc:Bounds x="1085" y="305" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1032" y="362" width="72" height="27" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ManualReview_di" bpmnElement="Task_ManualReview">
+        <dc:Bounds x="1180" y="470" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_OperatorDecision_di" bpmnElement="Gateway_OperatorDecision" isMarkerVisible="true">
+        <dc:Bounds x="1465" y="485" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1410" y="542" width="72" height="27" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_FraudCutOffAllow_di" bpmnElement="Event_FraudCutOffAllow">
+        <dc:Bounds x="1042" y="172" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1104" y="156" width="70" height="27" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_ManualCutOffAllow_di" bpmnElement="Event_ManualCutOffAllow">
+        <dc:Bounds x="1352" y="632" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1335" y="675" width="70" height="27" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_AllowMerge_di" bpmnElement="Gateway_AllowMerge" isMarkerVisible="true">
+        <dc:Bounds x="1465" y="305" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_TransferToMerchant_di" bpmnElement="Task_TransferToMerchant">
+        <dc:Bounds x="1560" y="290" width="190" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_CompletePayment_di" bpmnElement="Task_CompletePayment">
+        <dc:Bounds x="1810" y="290" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_NotifySuccess_di" bpmnElement="Task_NotifySuccess">
+        <dc:Bounds x="2020" y="290" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_PaymentCompleted_di" bpmnElement="End_PaymentCompleted">
+        <dc:Bounds x="2232" y="312" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="2208" y="355" width="84" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <!-- Компенсирующие обработчики -->
+      <bpmndi:BPMNShape id="Task_CancelPayment_di" bpmnElement="Task_CancelPayment">
+        <dc:Bounds x="250" y="110" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ReleaseLimits_di" bpmnElement="Task_ReleaseLimits">
+        <dc:Bounds x="460" y="110" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_RefundFunds_di" bpmnElement="Task_RefundFunds">
+        <dc:Bounds x="670" y="110" width="150" height="80" />
+      </bpmndi:BPMNShape>
+
+      <!-- Граничные события -->
+      <bpmndi:BPMNShape id="Boundary_CompCreatePayment_di" bpmnElement="Boundary_CompCreatePayment">
+        <dc:Bounds x="342" y="272" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_CompReserveLimits_di" bpmnElement="Boundary_CompReserveLimits">
+        <dc:Bounds x="552" y="272" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_CompDebitFunds_di" bpmnElement="Boundary_CompDebitFunds">
+        <dc:Bounds x="762" y="272" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_LimitExceeded_di" bpmnElement="Boundary_LimitExceeded">
+        <dc:Bounds x="517" y="352" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="558" y="385" width="80" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_DebitDeclined_di" bpmnElement="Boundary_DebitDeclined">
+        <dc:Bounds x="727" y="352" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="768" y="385" width="66" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_FraudCutOff_di" bpmnElement="Boundary_FraudCutOff">
+        <dc:Bounds x="982" y="272" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="942" y="250" width="34" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_CustomerCancelled_di" bpmnElement="Boundary_CustomerCancelled">
+        <dc:Bounds x="1192" y="532" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1112" y="575" width="90" height="27" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_ManualCutOff_di" bpmnElement="Boundary_ManualCutOff">
+        <dc:Bounds x="1282" y="532" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1310" y="575" width="46" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_TransferRejected_di" bpmnElement="Boundary_TransferRejected">
+        <dc:Bounds x="1617" y="352" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1658" y="385" width="90" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <!-- Link events -->
+      <bpmndi:BPMNShape id="Link_FromLimits_di" bpmnElement="Link_FromLimits">
+        <dc:Bounds x="517" y="432" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="500" y="475" width="70" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Link_FromDebit_di" bpmnElement="Link_FromDebit">
+        <dc:Bounds x="727" y="432" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="710" y="475" width="70" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Link_FromFraudDeny_di" bpmnElement="Link_FromFraudDeny">
+        <dc:Bounds x="1092" y="232" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1133" y="243" width="70" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Link_FromCustomerCancel_di" bpmnElement="Link_FromCustomerCancel">
+        <dc:Bounds x="1192" y="632" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1175" y="675" width="70" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Link_FromOperatorDeny_di" bpmnElement="Link_FromOperatorDeny">
+        <dc:Bounds x="1572" y="492" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1555" y="535" width="70" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Link_FromTransfer_di" bpmnElement="Link_FromTransfer">
+        <dc:Bounds x="1617" y="432" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1600" y="475" width="70" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <!-- Компенсация -->
+      <bpmndi:BPMNShape id="Link_CompensationStart_di" bpmnElement="Link_CompensationStart">
+        <dc:Bounds x="232" y="802" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="215" y="845" width="70" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_CompSplit_di" bpmnElement="Gateway_CompSplit">
+        <dc:Bounds x="315" y="795" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_CompRefund_di" bpmnElement="Event_CompRefund">
+        <dc:Bounds x="442" y="802" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="420" y="845" width="80" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_CompLimits_di" bpmnElement="Event_CompLimits">
+        <dc:Bounds x="562" y="802" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="540" y="845" width="80" height="27" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_CompPayment_di" bpmnElement="Event_CompPayment">
+        <dc:Bounds x="682" y="802" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="660" y="845" width="80" height="27" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_NotifySecurity_di" bpmnElement="Task_NotifySecurity">
+        <dc:Bounds x="485" y="900" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_CompJoin_di" bpmnElement="Gateway_CompJoin">
+        <dc:Bounds x="785" y="795" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_NotifyFailure_di" bpmnElement="Task_NotifyFailure">
+        <dc:Bounds x="890" y="780" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_PaymentNotCompleted_di" bpmnElement="End_PaymentNotCompleted">
+        <dc:Bounds x="1102" y="802" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1070" y="845" width="100" height="27" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <!-- Аннотации -->
+      <bpmndi:BPMNShape id="Note_Compensation_di" bpmnElement="Note_Compensation">
+        <dc:Bounds x="250" y="28" width="420" height="42" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Note_CutOff_di" bpmnElement="Note_CutOff">
+        <dc:Bounds x="1100" y="80" width="250" height="68" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Note_Pivot_di" bpmnElement="Note_Pivot">
+        <dc:Bounds x="1560" y="190" width="190" height="54" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Note_Retriable_di" bpmnElement="Note_Retriable">
+        <dc:Bounds x="1830" y="190" width="240" height="54" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Note_CompOrder_di" bpmnElement="Note_CompOrder">
+        <dc:Bounds x="160" y="690" width="260" height="54" />
+      </bpmndi:BPMNShape>
+
+      <!-- Рёбра основного потока -->
+      <bpmndi:BPMNEdge id="Flow_Start_Create_di" bpmnElement="Flow_Start_Create">
+        <di:waypoint x="198" y="330" /><di:waypoint x="250" y="330" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Create_Limits_di" bpmnElement="Flow_Create_Limits">
+        <di:waypoint x="400" y="330" /><di:waypoint x="460" y="330" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Limits_Debit_di" bpmnElement="Flow_Limits_Debit">
+        <di:waypoint x="610" y="330" /><di:waypoint x="670" y="330" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Debit_Fraud_di" bpmnElement="Flow_Debit_Fraud">
+        <di:waypoint x="820" y="330" /><di:waypoint x="880" y="330" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Fraud_Decision_di" bpmnElement="Flow_Fraud_Decision">
+        <di:waypoint x="1030" y="330" /><di:waypoint x="1085" y="330" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Decision_Allow_di" bpmnElement="Flow_Decision_Allow">
+        <di:waypoint x="1135" y="330" /><di:waypoint x="1465" y="330" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1150" y="312" width="64" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Decision_Manual_di" bpmnElement="Flow_Decision_Manual">
+        <di:waypoint x="1110" y="355" /><di:waypoint x="1110" y="510" /><di:waypoint x="1180" y="510" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1118" y="410" width="54" height="27" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Decision_Deny_di" bpmnElement="Flow_Decision_Deny">
+        <di:waypoint x="1110" y="305" /><di:waypoint x="1110" y="268" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1118" y="279" width="38" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Manual_OperatorDecision_di" bpmnElement="Flow_Manual_OperatorDecision">
+        <di:waypoint x="1350" y="510" /><di:waypoint x="1465" y="510" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Operator_Allow_di" bpmnElement="Flow_Operator_Allow">
+        <di:waypoint x="1490" y="485" /><di:waypoint x="1490" y="355" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1497" y="420" width="64" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Operator_Deny_di" bpmnElement="Flow_Operator_Deny">
+        <di:waypoint x="1515" y="510" /><di:waypoint x="1572" y="510" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1524" y="492" width="38" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_FraudCutOff_Event_di" bpmnElement="Flow_FraudCutOff_Event">
+        <di:waypoint x="1000" y="272" /><di:waypoint x="1000" y="190" /><di:waypoint x="1042" y="190" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_FraudCutOff_AllowMerge_di" bpmnElement="Flow_FraudCutOff_AllowMerge">
+        <di:waypoint x="1078" y="190" /><di:waypoint x="1490" y="190" /><di:waypoint x="1490" y="305" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ManualCutOff_Event_di" bpmnElement="Flow_ManualCutOff_Event">
+        <di:waypoint x="1300" y="568" /><di:waypoint x="1300" y="650" /><di:waypoint x="1352" y="650" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ManualCutOff_OperatorDecision_di" bpmnElement="Flow_ManualCutOff_OperatorDecision">
+        <di:waypoint x="1388" y="650" /><di:waypoint x="1490" y="650" /><di:waypoint x="1490" y="535" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_AllowMerge_Transfer_di" bpmnElement="Flow_AllowMerge_Transfer">
+        <di:waypoint x="1515" y="330" /><di:waypoint x="1560" y="330" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Transfer_Complete_di" bpmnElement="Flow_Transfer_Complete">
+        <di:waypoint x="1750" y="330" /><di:waypoint x="1810" y="330" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Complete_Notify_di" bpmnElement="Flow_Complete_Notify">
+        <di:waypoint x="1960" y="330" /><di:waypoint x="2020" y="330" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Notify_End_di" bpmnElement="Flow_Notify_End">
+        <di:waypoint x="2170" y="330" /><di:waypoint x="2232" y="330" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_LimitExceeded_Link_di" bpmnElement="Flow_LimitExceeded_Link">
+        <di:waypoint x="535" y="388" /><di:waypoint x="535" y="432" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_DebitDeclined_Link_di" bpmnElement="Flow_DebitDeclined_Link">
+        <di:waypoint x="745" y="388" /><di:waypoint x="745" y="432" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_CustomerCancelled_Link_di" bpmnElement="Flow_CustomerCancelled_Link">
+        <di:waypoint x="1210" y="568" /><di:waypoint x="1210" y="632" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_TransferRejected_Link_di" bpmnElement="Flow_TransferRejected_Link">
+        <di:waypoint x="1635" y="388" /><di:waypoint x="1635" y="432" />
+      </bpmndi:BPMNEdge>
+
+      <!-- Рёбра компенсации -->
+      <bpmndi:BPMNEdge id="Flow_CompStart_Split_di" bpmnElement="Flow_CompStart_Split">
+        <di:waypoint x="268" y="820" /><di:waypoint x="315" y="820" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Split_Refund_di" bpmnElement="Flow_Split_Refund">
+        <di:waypoint x="365" y="820" /><di:waypoint x="442" y="820" />
+        <bpmndi:BPMNLabel><dc:Bounds x="380" y="802" width="40" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Split_Security_di" bpmnElement="Flow_Split_Security">
+        <di:waypoint x="340" y="845" /><di:waypoint x="340" y="940" /><di:waypoint x="485" y="940" />
+        <bpmndi:BPMNLabel><dc:Bounds x="360" y="946" width="100" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_CompRefund_CompLimits_di" bpmnElement="Flow_CompRefund_CompLimits">
+        <di:waypoint x="478" y="820" /><di:waypoint x="562" y="820" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_CompLimits_CompPayment_di" bpmnElement="Flow_CompLimits_CompPayment">
+        <di:waypoint x="598" y="820" /><di:waypoint x="682" y="820" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_CompPayment_Join_di" bpmnElement="Flow_CompPayment_Join">
+        <di:waypoint x="718" y="820" /><di:waypoint x="785" y="820" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Security_Join_di" bpmnElement="Flow_Security_Join">
+        <di:waypoint x="635" y="940" /><di:waypoint x="810" y="940" /><di:waypoint x="810" y="845" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Join_NotifyFailure_di" bpmnElement="Flow_Join_NotifyFailure">
+        <di:waypoint x="835" y="820" /><di:waypoint x="890" y="820" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_NotifyFailure_End_di" bpmnElement="Flow_NotifyFailure_End">
+        <di:waypoint x="1040" y="820" /><di:waypoint x="1102" y="820" />
+      </bpmndi:BPMNEdge>
+
+      <!-- Ассоциации -->
+      <bpmndi:BPMNEdge id="Assoc_CompCreatePayment_di" bpmnElement="Assoc_CompCreatePayment">
+        <di:waypoint x="360" y="272" /><di:waypoint x="360" y="190" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Assoc_CompReserveLimits_di" bpmnElement="Assoc_CompReserveLimits">
+        <di:waypoint x="570" y="272" /><di:waypoint x="570" y="190" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Assoc_CompDebitFunds_di" bpmnElement="Assoc_CompDebitFunds">
+        <di:waypoint x="780" y="272" /><di:waypoint x="780" y="190" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Assoc_Note_Compensation_di" bpmnElement="Assoc_Note_Compensation">
+        <di:waypoint x="460" y="70" /><di:waypoint x="520" y="110" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Assoc_Note_CutOff_di" bpmnElement="Assoc_Note_CutOff">
+        <di:waypoint x="1100" y="130" /><di:waypoint x="1072" y="177" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Assoc_Note_Pivot_di" bpmnElement="Assoc_Note_Pivot">
+        <di:waypoint x="1655" y="244" /><di:waypoint x="1655" y="290" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Assoc_Note_Retriable_di" bpmnElement="Assoc_Note_Retriable">
+        <di:waypoint x="1885" y="244" /><di:waypoint x="1885" y="290" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Assoc_Note_CompOrder_di" bpmnElement="Assoc_Note_CompOrder">
+        <di:waypoint x="300" y="744" /><di:waypoint x="333" y="802" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
